@@ -16,7 +16,7 @@ class AccessLimiter {
       'lockFile'   => $_SERVER['SCRIPT_FILENAME'] . '.lock',
       'logFile'    => dirname($_SERVER['SCRIPT_FILENAME']) . '/log.txt',
       'logEnabled' => true,
-      'logFormat'  => '%TIME% %IP% > %FILE% [%CASE%] %CLIENT%',
+      'logFormat'  => '%TIME% %IP% > %FILE% %VIEWS% [%CASE%] %CLIENT%',
       'maxViews'   => 1,
       'bypassKey'  => 'bypass',
     ), $options);
@@ -30,12 +30,12 @@ class AccessLimiter {
     $views = $isPassThrough ? -1 : $this->getAndUpdateViews();
 
     if ($isPassThrough) {
-      $this->log(self::CASE_BYPASS);
+      $this->log(self::CASE_BYPASS, $views);
     } else {
       if ($views > $this->settings['maxViews']) {
-        $this->log(self::CASE_BLOCK);
+        $this->log(self::CASE_BLOCK, $views);
       } else {
-        $this->log(self::CASE_ALLOW);
+        $this->log(self::CASE_ALLOW, $views);
       }
     }
 
@@ -78,11 +78,13 @@ class AccessLimiter {
   /**
    *
    */
-  private function getLogInfo($case) {
+  private function getLogInfo($case, $views) {
+    $date = new DateTime('now', new DateTimeZone('GMT'));
     $placeholders = array(
-      '%TIME%'   => date('c'),
+      '%TIME%'   => $date->format('c'),
       '%IP%'     => $this->getClientIp(),
       '%CASE%'   => $case,
+      '%VIEWS%'  => $views,
       '%FILE%'   => $this->settings['file'] ? $this->settings['file'] : $this->settings['lockFile'],
       '%CLIENT%' => $_SERVER['HTTP_USER_AGENT'],
     );
@@ -97,13 +99,13 @@ class AccessLimiter {
   /**
    *
    */
-  private function log($case) {
+  private function log($case, $views) {
     if (!$this->settings['logEnabled']) {
       return;
     }
     try {
       $handle = fopen($this->settings['logFile'], 'a');
-      fwrite($handle, $this->getLogInfo($case) . "\n");
+      fwrite($handle, $this->getLogInfo($case, $views) . "\n");
       fclose($handle);
     } catch (Exception $e) {}
   }

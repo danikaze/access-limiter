@@ -1,11 +1,11 @@
 <?php
-include('./AccessLimiter.php');
+include('./inc/AccessLimiter.php');
 
 $limiter = new AccessLimiter(array(
   'maxViews' => 3,
   'file'     => 'img.jpg',
-  'lockFile' => '../locks/img.jpg.lock',
-  'logFile'  => '../log/log.txt',
+  'lockFile' => __DIR__ . '/locks/img.jpg.lock',
+  'logFile'  => __DIR__ . '/log/log.txt',
 ));
 
 function outputInternalFile($path) {
@@ -19,8 +19,7 @@ function outputInternalFile($path) {
 }
 
 if($limiter->isAllowed()) {
-  //outputInternalFile('./img.jpg');
-  echo "!";
+  outputInternalFile('./inc/img.jpg');
 } else {
   echo "Image blocked";
 }
