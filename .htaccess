@@ -1,0 +1,5 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule "test.html" "inc/view.php" [L]
+  RewriteRule "img.jpg" "inc/img.php" [L]
+</IfModule>
