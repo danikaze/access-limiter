@@ -5,12 +5,83 @@ class AccessLimiter {
   const CASE_ALLOW = 'Shown';
   const CASE_BLOCK = 'Blocked';
 
+  private $case;
   public $settings;
 
   /**
    *
    */
   public function __construct($options) {
+    $this->reset($options);
+  }
+
+  /**
+   *
+   */
+  public function isAllowed() {
+    $done = $this->case;
+    $isPassThrough = $this->isPassThrough();
+    $views = $this->getAndUpdateViews($this->case || $isPassThrough);
+
+    if ($isPassThrough) {
+      $this->case = self::CASE_BYPASS;
+    } else {
+      if ($views > $this->settings['maxViews']) {
+        $this->case = self::CASE_BLOCK;
+      } else {
+        $this->case = self::CASE_ALLOW;
+      }
+    }
+
+    if (!$done) {
+      $this->log($this->case, $views);
+    }
+    return $isPassThrough ? true : ($views <= $this->settings['maxViews']);
+  }
+
+  /**
+   *
+   */
+  public function getCase() {
+    return $this->case;
+  }
+
+  /**
+   *
+   */
+  public function sendMail($to, $options) {
+    $case = $this->getCase();
+    $file = $this->settings['file'] ? $this->settings['file'] : $this->settings['lockFile'];
+    $subject = "File accessed ($file > $case)";
+    $ip = $this->getClientIp();
+
+    $date = new DateTime('now', new DateTimeZone('GMT'));
+    if (isset($options) && isset($options['timezone'])) {
+      $date->setTimezone(new DateTimeZone($options['timezone']));
+    }
+    if (isset($options) && isset($options['timeformat'])) {
+      $time = $date->format($options['timeformat']);
+    } else {
+      $time = $date->format('c');
+    }
+
+    $msg = "There was an access to $file from $ip at $time.";
+    $msg .= "\nThe result was [$case].";
+    $msg .= "\n\nFor more information, check the logs.";
+
+    if (isset($options['logUrl'])) {
+      $msg .= "\n" . $options['logUrl'];
+    }
+
+
+    mail($to, $subject, $msg);
+  }
+
+  /*
+   *
+   */
+  public function reset($options) {
+    $this->case = null;
     $this->settings = array_merge(array(
       'file'       => null,
       'lockFile'   => $_SERVER['SCRIPT_FILENAME'] . '.lock',
@@ -18,34 +89,14 @@ class AccessLimiter {
       'logEnabled' => true,
       'logFormat'  => '%TIME% %IP% > %FILE% %VIEWS% [%CASE%] %CLIENT%',
       'maxViews'   => 1,
-      'bypassKey'  => 'bypass',
+      'bypassKey'  => null,
     ), $options);
   }
 
   /**
    *
    */
-  public function isAllowed() {
-    $isPassThrough = $this->isPassThrough();
-    $views = $isPassThrough ? -1 : $this->getAndUpdateViews();
-
-    if ($isPassThrough) {
-      $this->log(self::CASE_BYPASS, $views);
-    } else {
-      if ($views > $this->settings['maxViews']) {
-        $this->log(self::CASE_BLOCK, $views);
-      } else {
-        $this->log(self::CASE_ALLOW, $views);
-      }
-    }
-
-    return $views <= $this->settings['maxViews'];
-  }
-
-  /**
-   *
-   */
-  private function getAndUpdateViews() {
+  private function getAndUpdateViews($dontUpdate) {
     $views = 0;
     try {
       $folder = dirname($this->settings['lockFile']);
@@ -59,8 +110,10 @@ class AccessLimiter {
         $views = intval($views);
       }
 
-      $views++;
-      file_put_contents($this->settings['lockFile'], "$views\n");
+      if (!$dontUpdate) {
+        $views++;
+        file_put_contents($this->settings['lockFile'], "$views\n");
+      }
 
       return $views;
     } catch (Exception $e) {
@@ -72,7 +125,9 @@ class AccessLimiter {
    *
    */
   private function isPassThrough() {
-    return isset($this->settings['bypassKey']) && isset($_GET[$this->settings['bypassKey']]);
+    return isset($this->settings['bypassKey'])
+      && $this->settings['bypassKey'] != null
+      && isset($_GET[$this->settings['bypassKey']]);
   }
 
   /**
@@ -111,9 +166,9 @@ class AccessLimiter {
   }
 
   /**
-  *
-  */
-  private static function getClientIp() {
+   *
+   */
+  public static function getClientIp() {
     $ipaddress = '';
     if (getenv('HTTP_CLIENT_IP'))
       $ipaddress = getenv('HTTP_CLIENT_IP');
